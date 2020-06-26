@@ -26,11 +26,11 @@ namespace SPOAuthFiddlerExt
         /// <summary>
         /// A dictionary of the claims from the decoded JWT header
         /// </summary>
-        public IDictionary<string,object> HeaderClaims { get; set; }
+        public IDictionary<string, object> HeaderClaims { get; set; }
         /// <summary>
         /// A dictionary of the claims from the decoded JWT body
         /// </summary>
-        public IDictionary<string,object> BodyClaims { get; set; }
+        public IDictionary<string, object> BodyClaims { get; set; }
 
         public string IssuerID { get; set; }
 
@@ -42,7 +42,26 @@ namespace SPOAuthFiddlerExt
 
         public string HostName { get; set; }
 
-        
+
+        /// <summary>
+        ///    Given a JWT, decide whether or not it is in a valid format.
+        /// </summary>
+        /// <param name="token">String value formatted according to JWT spec</param>
+        /// <returns>True if this string matches the JWT format</returns>
+        public static bool IsJsonWebToken(string token)
+        {
+            //todo: make this a tryparse with an out parameter
+            try
+            {
+
+                JsonWebToken t2 = GetTokenFromString(token);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
 
         /// <summary>
         /// Given a JWT token, decodes it and splits the parts into a
@@ -52,27 +71,27 @@ namespace SPOAuthFiddlerExt
         /// <returns>Decoded JsonWebToken object</returns>
         public static JsonWebToken GetTokenFromString(string token)
         {
-            if(string.IsNullOrEmpty(token))
+            if (string.IsNullOrEmpty(token))
             {
                 throw new ArgumentException("Token is null or empty", "token");
             }
             JsonWebToken ret = new JsonWebToken();
 
             string[] decodedToken = Decode(token);
-                        
+
             ret.Header = JsonWebToken.GetPrettyPrintedJson(decodedToken[0]);
             ret.Body = JsonWebToken.GetPrettyPrintedJson(decodedToken[1]);
             //signature is not JSON, so output it as the raw value
             ret.Signature = decodedToken[2];
-                        
-            ret.HeaderClaims = JsonConvert.DeserializeObject<IDictionary<string,object>>(ret.Header);
+
+            ret.HeaderClaims = JsonConvert.DeserializeObject<IDictionary<string, object>>(ret.Header);
             ret.BodyClaims = JsonConvert.DeserializeObject<IDictionary<string, object>>(ret.Body);
-            
+
             if (ret.BodyClaims.ContainsKey("actortoken"))
             {
                 //Actor token is an encoded inner token.  Decode it and get the parts.
                 JsonWebToken actorToken = GetTokenFromString(ret.BodyClaims["actortoken"].ToString());
-                ret.BodyClaims["actortoken"] = actorToken;                
+                ret.BodyClaims["actortoken"] = actorToken;
             }
 
             string audience = ret.BodyClaims["aud"].ToString();
@@ -87,22 +106,22 @@ namespace SPOAuthFiddlerExt
             bool isLowTrust = false;
             bool isContext = false;
 
-            if(ret.BodyClaims.ContainsKey("appctx") && ret.BodyClaims.ContainsKey("appctxsender") && ret.BodyClaims.ContainsKey("isbrowserhostedapp"))
+            if (ret.BodyClaims.ContainsKey("appctx") && ret.BodyClaims.ContainsKey("appctxsender") && ret.BodyClaims.ContainsKey("isbrowserhostedapp"))
             {
                 //This is a SharePoint context token
-                isContext = true;                
+                isContext = true;
             }
             else if (audience.StartsWith("00000003-0000-0ff1-ce00-000000000000/"))
             {
                 //This is a SharePoint access token.  Now figure out if it's high or low trust
-                if(ret.BodyClaims.ContainsKey("actortoken"))
+                if (ret.BodyClaims.ContainsKey("actortoken"))
                 {
                     //This is a high trust token
-                    isHighTrust = true;                    
+                    isHighTrust = true;
                 }
                 else
                 {
-                    isLowTrust = true;                    
+                    isLowTrust = true;
                 }
             }
             else
@@ -110,8 +129,8 @@ namespace SPOAuthFiddlerExt
                 //This is a JWT token but not one from SharePoint
                 //no-op
             }
-            
-            if(isHighTrust || isLowTrust || isContext)
+
+            if (isHighTrust || isLowTrust || isContext)
             {
                 ret.HostName = audience.Substring(audience.IndexOf("/") + 1, audience.IndexOf("@") - audience.IndexOf("/") - 1);
                 ret.TenantID = audience.Substring(audience.IndexOf("@") + 1, audience.Length - audience.IndexOf("@") - 1);
@@ -121,7 +140,7 @@ namespace SPOAuthFiddlerExt
                 }
             }
 
-            if(isHighTrust)
+            if (isHighTrust)
             {
                 //For high-trust apps, the issuerID is in the actortoken
                 ret.IssuerID = ((JsonWebToken)ret.BodyClaims["actortoken"]).BodyClaims["iss"].ToString();
@@ -150,26 +169,23 @@ namespace SPOAuthFiddlerExt
                 }
                 else
                 {
-                    if(ret.BodyClaims.ContainsKey("nameid"))
-                    { 
+                    if (ret.BodyClaims.ContainsKey("nameid"))
+                    {
                         //App-only low-trust
                         string clientID = ret.BodyClaims["nameid"].ToString();
                         ret.ClientID = clientID.Substring(0, clientID.IndexOf("@"));
                     }
                 }
             }
-            if(isContext)
+            if (isContext)
             {
                 ret.IssuerID = ret.BodyClaims["iss"].ToString();
                 ret.ClientID = audience.Substring(0, audience.IndexOf("/") - 1);
-               
+
             }
 
-            return ret;            
+            return ret;
         }
-
-
-
 
         /// <summary>
         /// Splits a JWT token into its parts and decodes each part
@@ -196,8 +212,8 @@ namespace SPOAuthFiddlerExt
             string decodedBody = Base64UrlDecoder.Decode(body);
             ret[1] = decodedBody;
 
-            if(parts.Length == 3)
-            {                
+            if (parts.Length == 3)
+            {
                 string decodedSignature = Base64UrlDecoder.Decode(parts[2]);
                 ret[2] = decodedSignature;
             }
@@ -205,7 +221,7 @@ namespace SPOAuthFiddlerExt
             {
                 ret[2] = string.Empty;
             }
-            
+
             return ret;
         }
 
@@ -226,7 +242,7 @@ namespace SPOAuthFiddlerExt
         /// </summary>
         /// <returns>string</returns>
         public override string ToString()
-        {        
+        {
             string body = this.Body;
 
             if (this.BodyClaims.ContainsKey("actortoken"))
@@ -241,16 +257,16 @@ namespace SPOAuthFiddlerExt
 
                 //Increase indentation so it looks like a nested object
                 string actorBody = actorToken.Body.Replace("\n ", "\n    ");
-                
+
                 //Increase indentation of the brackets
                 actorBody = actorBody.Replace("{", "\n  {");
-                actorBody = actorBody.Replace("}","  }");
-                
+                actorBody = actorBody.Replace("}", "  }");
+
                 //Replace the actortoken claim value with the decoded and formatted token body
                 body = body.Replace(body.Substring(index, length), actorBody);
 
             }
-            return string.Format("{0}\n{1}", this.Header, body);        
+            return string.Format("{0}\n{1}", this.Header, body);
         }
     }
 
